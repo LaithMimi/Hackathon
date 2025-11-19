@@ -2,52 +2,17 @@ import React, { useEffect, useState } from 'react';
 import './App.css';
 import { BookOpen, FileText, GraduationCap, Calendar, Pencil, FolderOpen, MessageSquare, Send, X, ChevronRight } from 'lucide-react';
 
-const BASE_URL = 'https://your-api-url.com';
-const USE_MOCKS = true;
-const MOCK_COURSES = [
-  { id: 'cs101', name: 'Introduction to Computer Science', code: 'CS101' },
-  { id: 'cs201', name: 'Data Structures & Algorithms', code: 'CS201' },
-  { id: 'ee101', name: 'Circuits I', code: 'EE101' },
-  { id: 'me210', name: 'Statics', code: 'ME210' },
-  { id: 'ba120', name: 'Principles of Marketing', code: 'BA120' },
-  { id: 'cs310', name: 'Operating Systems', code: 'CS310' },
-];
-const buildMockFiles = (course, categoryId) => {
-  const names = {
-    'past-papers': 'Past Paper',
-    'slides': 'Lecture Slides',
-    'homeworks': 'Homework',
-    'other': 'Resource',
-  };
-  const base = names[categoryId] || 'Material';
-  const today = new Date();
-  return Array.from({ length: 6 }).map((_, i) => {
-    const d = new Date(today);
-    d.setDate(today.getDate() - i * 7);
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    return {
-      id: `${course.id}-${categoryId}-${i + 1}`,
-      label: `${base} ${i + 1} · ${course.code || course.id}`,
-      url: '#',
-      date: `${d.getFullYear()}-${mm}-${dd}`,
-    };
-  });
-};
-const mockAsk = ({ course, categoryId, question }) => {
-  const tips = [
-    'Focus on understanding core concepts before memorizing details.',
-    'Practice with previous materials to identify weak spots.',
-    'Summarize each topic in your own words.',
-  ];
-  return `About ${course.name} (${categoryId || 'general'}):\n\nQ: ${question}\n\nA: Consider breaking the problem down into smaller parts. ${tips[Math.floor(Math.random() * tips.length)]}`;
-};
+const BASE_URL = 'https://7ev04avoo7.execute-api.eu-north-1.amazonaws.com';
+
+// No mock mode: all data comes from backend APIs
 
 const App = () => {
   // Initial setup modal
   const [showSetupModal, setShowSetupModal] = useState(true);
-  const [selectedMajor, setSelectedMajor] = useState('');
-  const [selectedYear, setSelectedYear] = useState('');
+  // store S3-ready keys
+  const [majorKey, setMajorKey] = useState('');
+  const [yearKey, setYearKey] = useState('');
+  const [semesterKey, setSemesterKey] = useState('');
 
   // Course selection
   const [courses, setCourses] = useState([]);
@@ -68,44 +33,55 @@ const App = () => {
 
   const [error, setError] = useState('');
 
-  const majors = ['Software Engineering', 'Data Science', 'Cybersecurity', 'Artificial Intelligence'];
-  const years = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
-  const categories = [
-    { id: 'past-papers', name: 'Past Papers', icon: FileText, color: '#667eea' },
-    { id: 'slides', name: 'Lecture Slides', icon: BookOpen, color: '#764ba2' },
-    { id: 'homeworks', name: 'Assignments', icon: Pencil, color: '#f093fb' },
-    { id: 'other', name: 'Course Resources', icon: FolderOpen, color: '#48bb78' }
+  // S3 + domain constants (single source of truth)
+  const MAJORS = [
+    { key: 'SoftwareEngineering', label: 'Software Engineering' },
+    { key: 'DataScience', label: 'Data Science' },
+    { key: 'Cybersecurity', label: 'Cybersecurity' },
+    { key: 'ArtificialIntelligence', label: 'Artificial Intelligence' },
+  ];
+
+  const YEARS = [
+    { key: 'Year1', label: '1st Year' },
+    { key: 'Year2', label: '2nd Year' },
+    { key: 'Year3', label: '3rd Year' },
+    { key: 'Year4', label: '4th Year' },
+  ];
+
+  const SEMESTERS = [
+    { key: 'Semester-a', label: 'Semester 1' },
+    { key: 'Semester-b', label: 'Semester 2' },
+  ];
+
+  const CATEGORIES = [
+    { key: 'past-papers', label: 'Past Papers', icon: FileText, color: '#667eea' },
+    { key: 'slides', label: 'Lecture Slides', icon: BookOpen, color: '#764ba2' },
+    { key: 'homeworks', label: 'Assignments', icon: Pencil, color: '#f093fb' },
+    { key: 'other', label: 'Course Resources', icon: FolderOpen, color: '#48bb78' }
   ];
 
   useEffect(() => {
-    if (selectedMajor && selectedYear && !showSetupModal) {
-      if (USE_MOCKS) {
-        setCourses(MOCK_COURSES);
-      } else {
-        fetch(`${BASE_URL}/courses`)
-          .then((res) => res.json())
-          .then((data) => setCourses(data))
-          .catch(() => setError('Failed to load courses.'));
-      }
+    if (majorKey && yearKey && semesterKey && !showSetupModal) {
+      fetch(`${BASE_URL}/courses`)
+        .then((res) => res.json())
+        .then((data) => setCourses(data))
+        .catch(() => setError('Failed to load courses.'));
     }
-  }, [selectedMajor, selectedYear, showSetupModal]);
+  }, [majorKey, yearKey, semesterKey, showSetupModal]);
 
   useEffect(() => {
     if (selectedCategory && selectedCourse) {
-      if (USE_MOCKS) {
-        setFiles(buildMockFiles(selectedCourse, selectedCategory.id));
-      } else {
-        fetch(`${BASE_URL}/courses/${selectedCourse.id}/files?category=${selectedCategory.id}`)
-          .then((res) => res.json())
-          .then((data) => setFiles(data))
-          .catch(() => setError('Failed to load files.'));
-      }
+      const params = new URLSearchParams({ category: selectedCategory.key, major: majorKey, year: yearKey, semester: semesterKey });
+      fetch(`${BASE_URL}/courses/${selectedCourse.id}/files?${params.toString()}`)
+        .then((res) => res.json())
+        .then((data) => setFiles(data))
+        .catch(() => setError('Failed to load files.'));
     }
-  }, [selectedCategory, selectedCourse]);
+  }, [selectedCategory, selectedCourse, majorKey, yearKey, semesterKey]);
 
   const handleSetupComplete = () => {
-    if (!selectedMajor || !selectedYear) {
-      setError('Please select both major and year.');
+    if (!majorKey || !yearKey || !semesterKey) {
+      setError('Please select major, year, and semester.');
       return;
     }
     setShowSetupModal(false);
@@ -135,34 +111,23 @@ const App = () => {
     setChatHistory((prev) => [...prev, userMessage]);
     setLoadingAnswer(true);
     setError('');
-    if (USE_MOCKS) {
-      const q = question;
-      setQuestion('');
-      setTimeout(() => {
-        const content = mockAsk({ course: selectedCourse, categoryId: selectedCategory?.id, question: q });
-        const botMessage = { role: 'assistant', content };
+    fetch(`${BASE_URL}/ask`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        course_id: selectedCourse.id, 
+        category: selectedCategory?.key,
+        question 
+      }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        const botMessage = { role: 'assistant', content: data.answer || 'No answer received.' };
         setChatHistory((prev) => [...prev, botMessage]);
-        setLoadingAnswer(false);
-      }, 600);
-    } else {
-      fetch(`${BASE_URL}/ask`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          course_id: selectedCourse.id, 
-          category: selectedCategory?.id,
-          question 
-        }),
+        setQuestion('');
       })
-        .then((res) => res.json())
-        .then((data) => {
-          const botMessage = { role: 'assistant', content: data.answer || 'No answer received.' };
-          setChatHistory((prev) => [...prev, botMessage]);
-          setQuestion('');
-        })
-        .catch(() => setError('AI failed to respond.'))
-        .finally(() => setLoadingAnswer(false));
-    }
+      .catch(() => setError('AI failed to respond.'))
+      .finally(() => setLoadingAnswer(false));
   };
 
   const handleBackToCourses = () => {
@@ -193,13 +158,13 @@ const App = () => {
                   Select Your Major
                 </label>
                 <select 
-                  value={selectedMajor} 
-                  onChange={(e) => setSelectedMajor(e.target.value)}
+                  value={majorKey} 
+                  onChange={(e) => setMajorKey(e.target.value)}
                   className="modal-select"
                 >
                   <option value="">Choose your major</option>
-                  {majors.map((m) => (
-                    <option key={m} value={m}>{m}</option>
+                  {MAJORS.map((m) => (
+                    <option key={m.key} value={m.key}>{m.label}</option>
                   ))}
                 </select>
               </div>
@@ -210,13 +175,30 @@ const App = () => {
                   Select Your Year
                 </label>
                 <select 
-                  value={selectedYear} 
-                  onChange={(e) => setSelectedYear(e.target.value)}
+                  value={yearKey} 
+                  onChange={(e) => setYearKey(e.target.value)}
                   className="modal-select"
                 >
                   <option value="">Choose your year</option>
-                  {years.map((y) => (
-                    <option key={y} value={y}>{y}</option>
+                  {YEARS.map((y) => (
+                    <option key={y.key} value={y.key}>{y.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label>
+                  <Calendar size={20} />
+                  Select Your Semester
+                </label>
+                <select 
+                  value={semesterKey} 
+                  onChange={(e) => setSemesterKey(e.target.value)}
+                  className="modal-select"
+                >
+                  <option value="">Choose your semester</option>
+                  {SEMESTERS.map((s) => (
+                    <option key={s.key} value={s.key}>{s.label}</option>
                   ))}
                 </select>
               </div>
@@ -244,11 +226,11 @@ const App = () => {
             </div>
             
             <div className="category-grid">
-              {categories.map((category) => {
+              {CATEGORIES.map((category) => {
                 const Icon = category.icon;
                 return (
                   <div
-                    key={category.id}
+                    key={category.key}
                     className="category-card"
                     onClick={() => handleCategorySelect(category)}
                     style={{ '--category-color': category.color }}
@@ -256,7 +238,7 @@ const App = () => {
                     <div className="category-icon">
                       <Icon size={32} />
                     </div>
-                    <h3>{category.name}</h3>
+                    <h3>{category.label}</h3>
                     <div className="category-arrow">
                       <ChevronRight size={20} />
                     </div>
@@ -278,8 +260,9 @@ const App = () => {
                 <span>CourseHub</span>
               </div>
               <div className="header-info">
-                <span className="info-tag">{selectedMajor}</span>
-                <span className="info-tag">{selectedYear}</span>
+                <span className="info-tag">{MAJORS.find((m) => m.key === majorKey)?.label || ''}</span>
+                <span className="info-tag">{YEARS.find((y) => y.key === yearKey)?.label || ''}</span>
+                <span className="info-tag">{SEMESTERS.find((s) => s.key === semesterKey)?.label || ''}</span>
               </div>
             </div>
           </header>
@@ -298,7 +281,7 @@ const App = () => {
                     <div className="view-title">
                       <h1>{selectedCourse.name}</h1>
                       <p className="category-badge" style={{ color: selectedCategory.color }}>
-                        {selectedCategory.name}
+                        {selectedCategory.label}
                       </p>
                     </div>
                   </div>
@@ -368,7 +351,7 @@ const App = () => {
                 <div className="chat-header">
                   <div>
                     <h3>AI Assistant</h3>
-                    <p>Ask about {selectedCategory?.name}</p>
+                    <p>Ask about {selectedCategory?.label}</p>
                   </div>
                   <button onClick={() => setShowChat(false)}>
                     <X size={20} />
@@ -429,7 +412,7 @@ const App = () => {
                       <h1>{selectedCourse?.name || 'Your Courses'}</h1>
                       {selectedCategory && (
                         <p className="category-badge" style={{ color: selectedCategory.color }}>
-                          {selectedCategory.name}
+                          {selectedCategory.label}
                         </p>
                       )}
                     </div>
